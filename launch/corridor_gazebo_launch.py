@@ -66,7 +66,7 @@ def generate_launch_description():
                 'x_pose': '0.0',
                 'y_pose': '-2.0',
                 'z_pose': '0.00',
-                'yaw_pose': '1.5708',  # ← 新增！直接朝 Y 轴正方向
+                'yaw': '1.5708',  # ← 新增！直接朝 Y 轴正方向
             }.items(),
         ),
     ])

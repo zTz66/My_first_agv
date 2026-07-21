@@ -173,11 +173,8 @@ private:
    * @param pose 当前机器人位姿
    * @return true 检测到障碍物，false 未检测到
    */
-  // 原Trae检测前方障碍物   bool checkObstacleAhead(const geometry_msgs::msg::PoseStamped & pose);
-  //--------------------改动检测障碍物逻辑代码--------------------
-  bool checkObstacleAhead(
-  const geometry_msgs::msg::PoseStamped & pose,
-  const nav_msgs::msg::Path & path);
+  bool checkObstacleAhead(const geometry_msgs::msg::PoseStamped & pose);
+ 
   /**
    * @brief 发布障碍物警告消息
    * 

@@ -28,15 +28,15 @@ ORIGIN_X = -5.0            # 地图原点 X 坐标（世界坐标系）
 ORIGIN_Y = -5.0            # 地图原点 Y 坐标（世界坐标系）
 
 # 走廊参数（与 corridor.world 完全一致）
-CORRIDOR_LENGTH = 10.0     # 走廊长度（米）
+CORRIDOR_LENGTH = 8.0     # 走廊长度（米）
 CORRIDOR_WIDTH = 1.5       # 走廊宽度（米）
 WALL_THICKNESS = 0.15      # 墙壁厚度（米）
-CORRIDOR_CENTER_X = 0.0    # 走廊中心 X 坐标
-CORRIDOR_CENTER_Y = 3.0    # 走廊中心 Y 坐标
+CORRIDOR_CENTER_X = 4.0    # 走廊中心 X 坐标
+CORRIDOR_CENTER_Y = 0.0    # 走廊中心 Y 坐标
 
 # 障碍物参数（初始位置）
-OBSTACLE_X = 0.0
-OBSTACLE_Y = 2.0
+OBSTACLE_X = 4.0
+OBSTACLE_Y = 0.0
 OBSTACLE_SIZE = 0.3 
 
 # ==========================================
@@ -97,10 +97,10 @@ def draw_wall(map_array, x_min, x_max, y_min, y_max):
 # 绘制走廊墙壁
 # ==========================================
 print("绘制左墙...")
-draw_wall(map_data, left_wall_x_min, left_wall_x_max, wall_y_min, wall_y_max)
+draw_wall(map_data, wall_x_min, wall_x_max, left_wall_y_min, left_wall_y_max)
 
 print("绘制右墙...")
-draw_wall(map_data, right_wall_x_min, right_wall_x_max, wall_y_min, wall_y_max)
+draw_wall(map_data, wall_x_min, wall_x_max, right_wall_y_min, right_wall_y_max)
 
 # ==========================================
 # 绘制障碍物（盒子）

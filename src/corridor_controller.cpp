@@ -156,7 +156,7 @@ void CorridorController::setPlan(const nav_msgs::msg::Path & path)
  * 3. 如果路径太短，返回路径末端点
  */
 
- /* -----------------------------原Trae纯追踪算法代码-----------------
+ /* -----------------------------原Trae纯追踪算法代码-----------------*/
 geometry_msgs::msg::Point CorridorController::getLookaheadPoint(
   const geometry_msgs::msg::PoseStamped & pose,
   const nav_msgs::msg::Path & path)
@@ -199,55 +199,6 @@ geometry_msgs::msg::Point CorridorController::getLookaheadPoint(
   // 如果路径太短，返回路径末端点
   return path.poses.back().pose.position;
 }
-*/
-
-/* -----------------------------改动后前视点查找算法代码----------------- */
-geometry_msgs::msg::Point CorridorController::getLookaheadPoint(
-  const geometry_msgs::msg::PoseStamped & pose,
-  const nav_msgs::msg::Path & path)
-{
-  if (path.poses.empty()) {
-    return pose.pose.position;
-  }
-  
-  double robot_x = pose.pose.position.x;
-  double robot_y = pose.pose.position.y;
-  
-  // 第 1 步：找到路径上欧氏距离最近的点（作为起点）
-  size_t closest_idx = 0;
-  double min_dist = std::numeric_limits<double>::max();
-  
-  for (size_t i = 0; i < path.poses.size(); ++i) {
-    double dx = path.poses[i].pose.position.x - robot_x;
-    double dy = path.poses[i].pose.position.y - robot_y;
-    double dist = std::hypot(dx, dy);
-    if (dist < min_dist) {
-      min_dist = dist;
-      closest_idx = i;
-    }
-  }
-  
-  // 第 2 步：从最近点开始，沿路径向前累加距离
-  double accumulated = 0.0;
-  for (size_t i = closest_idx; i + 1 < path.poses.size(); ++i) {
-    double dx = path.poses[i+1].pose.position.x - path.poses[i].pose.position.x;
-    double dy = path.poses[i+1].pose.position.y - path.poses[i].pose.position.y;
-    double seg_len = std::hypot(dx, dy);
-    
-    if (accumulated + seg_len >= lookahead_dist_) {
-      // 在这个线段内插值，找到精确的 lookahead_dist 处的点
-      double ratio = (lookahead_dist_ - accumulated) / seg_len;
-      geometry_msgs::msg::Point p;
-      p.x = path.poses[i].pose.position.x + ratio * dx;
-      p.y = path.poses[i].pose.position.y + ratio * dy;
-      return p;
-    }
-    accumulated += seg_len;
-  }
-  
-  // 路径太短，返回最后一个点
-  return path.poses.back().pose.position;
-}
 
 /**
  * @brief 检测前方是否有障碍物
@@ -261,8 +212,8 @@ geometry_msgs::msg::Point CorridorController::getLookaheadPoint(
  * 4. 如果检测到致命障碍（LETHAL_OBSTACLE），返回 true
  */
 
- //--------------------原检测障碍物逻辑代码--------------------
-/*bool CorridorController::checkObstacleAhead(
+ /*--------------------原检测障碍物逻辑代码--------------------*/
+bool CorridorController::checkObstacleAhead(
   const geometry_msgs::msg::PoseStamped & pose)
 {
   // 获取 costmap 指针
@@ -316,99 +267,7 @@ geometry_msgs::msg::Point CorridorController::getLookaheadPoint(
   
   return false;  // 未检测到障碍物
 }
-*/
-// ---------------------改动！！！！--------------
-bool CorridorController::checkObstacleAhead(
-  const geometry_msgs::msg::PoseStamped & pose,
-  const nav_msgs::msg::Path & path)            // ← 新增参数
-{
-  // 获取 costmap 指针
-  auto costmap = costmap_ros_->getCostmap();
-  std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> lock(*costmap->getMutex());
-  
-  // 获取机器人当前位置
-  double robot_x = pose.pose.position.x;
-  double robot_y = pose.pose.position.y;
-  
-  // ===== 关键修改：算"路径朝向"，而不是用车头朝向 =====
-  // 默认值先用车头朝向（万一路径太短，兜底用）
-  double scan_yaw = tf2::getYaw(pose.pose.orientation);
-  
-    if (!path.poses.empty()) {
-    // 新逻辑：沿路径"往前走"，找第一个离机器人足够远的点
-    // 这样天然跳过"身后的路"和"脚下的点"，方向永远指向前进方向
-    const double MIN_LOOKAHEAD = 0.3;   // 至少看0.3m外的点，方向才稳
-    double adx = 0.0, ady = 0.0;
-    bool found = false;
-    
-    for (size_t i = 0; i < path.poses.size(); ++i) {
-      double ddx = path.poses[i].pose.position.x - robot_x;
-      double ddy = path.poses[i].pose.position.y - robot_y;
-      if (std::hypot(ddx, ddy) >= MIN_LOOKAHEAD) {
-        adx = ddx;
-        ady = ddy;
-        found = true;
-        break;     // 找到第一个就停，它就是"前方"
-      }
-    }
-    
-    // 兜底：万一整条路径都在0.3m内（快到终点了），用最后一个点
-    if (!found) {
-      adx = path.poses.back().pose.position.x - robot_x;
-      ady = path.poses.back().pose.position.y - robot_y;
-      found = (std::hypot(adx, ady) > 1e-3);
-    }
-    
-    if (found) {
-      scan_yaw = std::atan2(ady, adx);   // 这才是真正的前进方向
-    }
-  }
-   RCLCPP_INFO(logger_, 
-    "🔍 scan=%.2f 车头=%.2f 点数=%zu 首=(%.2f,%.2f) 尾=(%.2f,%.2f) 我=(%.2f,%.2f)",
-    scan_yaw, tf2::getYaw(pose.pose.orientation), path.poses.size(),
-    path.poses.front().pose.position.x, path.poses.front().pose.position.y,
-    path.poses.back().pose.position.x,  path.poses.back().pose.position.y,
-    robot_x, robot_y);
 
-  // ===== 关键修改结束 =====
-  
-  // 获取 costmap 分辨率
-  double resolution = costmap->getResolution();
-  
-  // 在扇形区域内扫描（注意：下面全部用 scan_yaw，不再用 robot_yaw）
-  double angle_step = 0.1;
-  double dist_step = resolution;
-  
-  for (double dist = obstacle_detect_range_min_; 
-       dist <= obstacle_detect_range_max_; 
-       dist += dist_step)
-  {
-    for (double angle = -obstacle_detect_angle_ / 2.0; 
-         angle <= obstacle_detect_angle_ / 2.0; 
-         angle += angle_step)
-    {
-      // 计算检测点的世界坐标（用 scan_yaw）
-      double check_x = robot_x + dist * std::cos(scan_yaw + angle);   // ← 改
-      double check_y = robot_y + dist * std::sin(scan_yaw + angle);   // ← 改
-      
-      unsigned int mx, my;
-      if (!costmap->worldToMap(check_x, check_y, mx, my)) {
-        continue;
-      }
-      
-      unsigned char cost = costmap->getCost(mx, my);
-      
-      if (cost >= LETHAL_OBSTACLE) {
-        last_obstacle_pos_.x = check_x;
-        last_obstacle_pos_.y = check_y;
-        last_obstacle_pos_.z = 0.0;
-        return true;
-      }
-    }
-  }
-  
-  return false;
-}
 /**
  * @brief 发布障碍物警告消息
  */
@@ -485,9 +344,8 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
     throw std::runtime_error("CorridorController: Global plan is empty");
   }
   
-  // 原Trae检测前方障碍物   bool obstacle_now = checkObstacleAhead(pose);
-    // 改动！！检测前方障碍物（把路径也传进去，让检测扇形对准"路"而不是"车头"）
-  bool obstacle_now = checkObstacleAhead(pose, current_plan);
+ bool obstacle_now = checkObstacleAhead(pose);
+
   // 状态机逻辑
   switch (current_state_) {
     case ControllerState::NORMAL: {
@@ -529,23 +387,6 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
         double angular_vel = kappa * max_linear_speed_;
         angular_vel = std::clamp(angular_vel, -max_angular_speed_, max_angular_speed_);
 
-        // 改动！！！！！！！！！！！
-
-// ========== 新增：横向纠偏 ==========
-// 计算机器人到路径中心线的横向距离（假设路径是沿 Y 轴的直线 x=0）
-double cross_track_error = pose.pose.position.x;  // x>0 表示偏右，x<0 表示偏左
-
-// PD 控制纠偏：距离中心线越远，转得越狠
-double k_p = 1.5;  // 比例系数，可以调大调小
-double k_d = 0.5;  // 微分系数，防止振荡
-
-// 简单起见，只用 P 控制也行
-double correction = -k_p * cross_track_error;  // 偏右(x>0)时，correction<0，产生左转指令
-
-// 将纠偏项加到角速度上
-angular_vel += correction;
-angular_vel = std::clamp(angular_vel, -max_angular_speed_, max_angular_speed_);
-// ====================================
         
         // 5. 计算线速度（根据角速度调整）
         double linear_vel = max_linear_speed_;
