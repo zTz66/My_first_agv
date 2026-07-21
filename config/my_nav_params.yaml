@@ -263,7 +263,7 @@ global_costmap:
         corridor_width: 1.5                       # 走廊宽度（米）
         # 走廊航点：从 (0, -2) 到 (0, 8) 的直线走廊（沿 Y 轴）
         # 格式：[x1, y1, x2, y2, ...]
-        corridor_waypoints: [0.0, -2.0, 0.0, 5.0]
+        corridor_waypoints: [-2.0, 0.0, 8.0, 0.0]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True

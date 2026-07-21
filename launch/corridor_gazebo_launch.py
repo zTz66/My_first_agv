@@ -63,10 +63,10 @@ def generate_launch_description():
                 os.path.join(turtlebot3_gazebo_dir, 'launch', 'spawn_turtlebot3.launch.py')
             ),
             launch_arguments={
-                'x_pose': '0.0',
-                'y_pose': '-2.0',
+                'x_pose': '-2.0',
+                'y_pose': '0.0',
                 'z_pose': '0.00',
-                'yaw': '1.5708',  # ← 新增！直接朝 Y 轴正方向
+                
             }.items(),
         ),
     ])
