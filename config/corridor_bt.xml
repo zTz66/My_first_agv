@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!--
+  走廊导航专用行为树
+  
+  关键特性：
+  - 移除了所有恢复行为节点（RecoveryNode）
+  - 当控制器抛出异常时，导航任务直接失败，不会触发 spin/backup 等恢复行为
+  - 保留 1Hz 的重规划频率，用于更新全局路径（但控制器会严格禁止绕行）
+  
+  行为树结构：
+  PipelineSequence
+    ├── RateController (1Hz) → ComputePathToPose（全局规划器）
+    └── FollowPath（走廊控制器）
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <PipelineSequence name="NavigateWithReplanning">
+
+    <!-- 只规划一次全局路径 -->
+    <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+    
+      <!-- 1Hz 频率重新规划全局路径 -->
+      <!--
+      <RateController hz="1.0">
+        <ComputePathToPose 
+          goal="{goal}" 
+          path="{path}" 
+          planner_id="GridBased"/>
+      </RateController> 
+      -->
+      
+      <!-- 使用走廊控制器跟随路径 -->
+      <!-- 注意：这里没有 RecoveryNode 包裹，所以控制器异常会直接导致导航失败 -->
+      <FollowPath 
+        path="{path}" 
+        controller_id="CorridorFollow"
+        goal_checker_id="general_goal_checker"/>
+    </PipelineSequence>
+  </BehaviorTree>
+</root>

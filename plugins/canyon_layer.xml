@@ -1,0 +1,6 @@
+<library path="canyon_layer">
+  <class type="my_first_agv::CanyonLayer" base_class_type="nav2_costmap_2d::Layer">
+    <description>This is a canyon layer that blocks x > 3.0</description>
+    <description>This is a canyon layer that blocks x > 5.0</description>
+  </class>
+</library>

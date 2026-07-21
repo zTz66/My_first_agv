@@ -1,0 +1,12 @@
+<library path="corridor_controller">
+  <class type="my_first_agv::CorridorController" base_class_type="nav2_core::Controller">
+    <description>
+      走廊约束导航控制器插件。
+      功能特性：
+      - 沿全局路径进行路径跟踪（Pure Pursuit算法）
+      - 前方障碍物检测与立即停车
+      - 障碍物持续时间监控与警告发布
+      - 严格禁止重规划和绕行行为
+    </description>
+  </class>
+</library>
