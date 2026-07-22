@@ -192,6 +192,16 @@ controller_server:
       min_linear_speed: 0.05           # 最小线速度（m/s）
       max_angular_speed: 1.0           # 最大角速度（rad/s）
       
+      # Rotation Shim 参数（目标点在身后时原地旋转对准路径）
+      angular_dist_threshold: 0.785398      # 触发旋转的航向偏差（45°）
+      angular_disengage_threshold: 0.087266 # 退出旋转的航向偏差（5°）
+      rotate_to_heading_angular_vel: 0.8    # 原地旋转角速度（rad/s）
+
+      # 路径跟踪控制参数
+      heading_gain: 1.0              # 航向对齐增益
+      cte_gain: 0.5                  # 横向误差纠正增益（保守值，避免 oscillation）
+      max_path_angular_speed: 0.3    # 路径跟踪时最大角速度（rad/s）
+
       # 障碍物检测参数
       obstacle_detect_range_min: 0.20   # 检测最小距离（米）
       obstacle_detect_range_max: 0.30   # 检测最大距离（米）
