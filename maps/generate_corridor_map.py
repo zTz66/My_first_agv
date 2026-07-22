@@ -34,10 +34,6 @@ WALL_THICKNESS = 0.15      # 墙壁厚度（米）
 CORRIDOR_CENTER_X = 4.0    # 走廊中心 X 坐标
 CORRIDOR_CENTER_Y = 0.0    # 走廊中心 Y 坐标
 
-# 障碍物参数（初始位置）
-OBSTACLE_X = 4.0
-OBSTACLE_Y = 0.0
-OBSTACLE_SIZE = 0.3 
 
 # ==========================================
 # 计算地图尺寸（像素）
@@ -102,13 +98,6 @@ draw_wall(map_data, wall_x_min, wall_x_max, left_wall_y_min, left_wall_y_max)
 print("绘制右墙...")
 draw_wall(map_data, wall_x_min, wall_x_max, right_wall_y_min, right_wall_y_max)
 
-# ==========================================
-# 绘制障碍物（盒子）
-# ==========================================
-print("绘制障碍物...")
-draw_wall(map_data, 
-          OBSTACLE_X - OBSTACLE_SIZE/2, OBSTACLE_X + OBSTACLE_SIZE/2,
-          OBSTACLE_Y - OBSTACLE_SIZE/2, OBSTACLE_Y + OBSTACLE_SIZE/2)
 
 # ==========================================
 # 在地图边缘绘制边界墙（模拟房间外墙）
