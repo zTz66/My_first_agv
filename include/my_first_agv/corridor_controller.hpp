@@ -13,6 +13,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include "nav_msgs/msg/path.hpp"
+#include "sensor_msgs/msg/laser_scan.hpp"
 #include "nav2_core/controller.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "tf2_ros/transform_listener.h"
@@ -174,7 +175,28 @@ private:
    * @return true 检测到障碍物，false 未检测到
    */
   bool checkObstacleAhead(const geometry_msgs::msg::PoseStamped & pose);
- 
+
+  /**
+   * @brief 激光雷达回调函数
+   *
+   * 接收 /scan 话题数据并保存最新一帧激光扫描，
+   * 用于直接检测前方障碍物（不依赖 costmap 清除）。
+   *
+   * @param msg 激光扫描消息
+   */
+  void laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg);
+
+  /**
+   * @brief 使用激光雷达检测前方障碍物
+   *
+   * 直接分析 /scan 数据，检测机器人前方扇形区域内
+   * 是否有距离在 [min, max] 范围内的障碍物。
+   *
+   * @param pose 当前机器人位姿
+   * @return true 检测到障碍物，false 未检测到
+   */
+  bool checkObstacleByLaser(const geometry_msgs::msg::PoseStamped & pose);
+
   /**
    * @brief 发布障碍物警告消息
    * 
@@ -197,6 +219,13 @@ private:
   // 发布者
   rclcpp_lifecycle::LifecyclePublisher<my_first_agv::msg::ObstacleWarning>::SharedPtr
     warning_pub_;
+
+  // 激光雷达订阅者
+  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
+
+  // 最新激光扫描数据
+  sensor_msgs::msg::LaserScan::SharedPtr latest_scan_;
+  std::mutex scan_mutex_;
 
   // 全局路径
   nav_msgs::msg::Path global_plan_;

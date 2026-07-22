@@ -84,7 +84,12 @@ void CorridorController::configure(
   // 创建警告消息发布者
   warning_pub_ = node->create_publisher<my_first_agv::msg::ObstacleWarning>(
     "/obstacle_warning", rclcpp::QoS(10));
-  
+
+  // 订阅激光雷达数据，用于直接检测障碍物
+  laser_sub_ = node->create_subscription<sensor_msgs::msg::LaserScan>(
+    "/scan", rclcpp::SensorDataQoS(),
+    std::bind(&CorridorController::laserCallback, this, std::placeholders::_1));
+
   // 初始化状态机
   current_state_ = ControllerState::NORMAL;
   obstacle_detected_ = false;
@@ -113,6 +118,11 @@ void CorridorController::cleanup()
 {
   RCLCPP_INFO(logger_, "Cleaning up CorridorController");
   warning_pub_.reset();
+  laser_sub_.reset();
+  {
+    std::lock_guard<std::mutex> lock(scan_mutex_);
+    latest_scan_.reset();
+  }
 }
 
 /**
@@ -219,53 +229,178 @@ bool CorridorController::checkObstacleAhead(
   // 获取 costmap 指针
   auto costmap = costmap_ros_->getCostmap();
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> lock(*costmap->getMutex());
-  
+
   // 获取机器人当前位置和朝向
   double robot_x = pose.pose.position.x;
   double robot_y = pose.pose.position.y;
   double robot_yaw = tf2::getYaw(pose.pose.orientation);
-  
+
   // 获取 costmap 分辨率
   double resolution = costmap->getResolution();
-  
+
   // 在扇形区域内扫描
   // 使用极坐标扫描：距离从 min 到 max，角度从 -angle/2 到 +angle/2
   double angle_step = 0.1;  // 角度步长（弧度）
   double dist_step = resolution;  // 距离步长（与 costmap 分辨率相同）
-  
-  for (double dist = obstacle_detect_range_min_; 
-       dist <= obstacle_detect_range_max_; 
+
+  // 用于调试：记录检测到的最大代价值和位置
+  unsigned char max_cost = 0;
+  double max_cost_x = robot_x;
+  double max_cost_y = robot_y;
+
+  for (double dist = obstacle_detect_range_min_;
+       dist <= obstacle_detect_range_max_;
        dist += dist_step)
   {
-    for (double angle = -obstacle_detect_angle_ / 2.0; 
-         angle <= obstacle_detect_angle_ / 2.0; 
+    for (double angle = -obstacle_detect_angle_ / 2.0;
+         angle <= obstacle_detect_angle_ / 2.0;
          angle += angle_step)
     {
       // 计算检测点的世界坐标
       double check_x = robot_x + dist * std::cos(robot_yaw + angle);
       double check_y = robot_y + dist * std::sin(robot_yaw + angle);
-      
+
       // 将世界坐标转换为 costmap 栅格坐标
       unsigned int mx, my;
       if (!costmap->worldToMap(check_x, check_y, mx, my)) {
         continue;  // 如果超出 costmap 范围，跳过
       }
-      
+
       // 获取该栅格的代价值
       unsigned char cost = costmap->getCost(mx, my);
-      
+
+      // 记录最大代价值（用于调试）
+      if (cost > max_cost) {
+        max_cost = cost;
+        max_cost_x = check_x;
+        max_cost_y = check_y;
+      }
+
       // 如果是致命障碍，说明检测到障碍物
       if (cost >= LETHAL_OBSTACLE) {
         // 记录障碍物位置（用于警告消息）
         last_obstacle_pos_.x = check_x;
         last_obstacle_pos_.y = check_y;
         last_obstacle_pos_.z = 0.0;
+        RCLCPP_DEBUG(logger_,
+          "检测到障碍物：位置 (%.2f, %.2f)，代价值 %d",
+          check_x, check_y, static_cast<int>(cost));
         return true;
       }
     }
   }
-  
+
+  // 未检测到障碍物时，输出调试信息（每 2 秒一次，避免刷屏）
+  static rclcpp::Time last_debug_time = node_.lock()->now();
+  rclcpp::Time now = node_.lock()->now();
+  if ((now - last_debug_time).seconds() > 2.0) {
+    RCLCPP_INFO(logger_,
+      "前方无障碍：机器人 (%.2f, %.2f)，扇形内最大代价值 %d（位置 %.2f, %.2f）",
+      robot_x, robot_y, static_cast<int>(max_cost), max_cost_x, max_cost_y);
+    last_debug_time = now;
+  }
+
   return false;  // 未检测到障碍物
+}
+
+/**
+ * @brief 激光雷达回调函数
+ *
+ * 保存最新一帧激光扫描数据。
+ */
+void CorridorController::laserCallback(
+  const sensor_msgs::msg::LaserScan::SharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(scan_mutex_);
+  latest_scan_ = msg;
+}
+
+/**
+ * @brief 使用激光雷达检测前方障碍物
+ *
+ * 直接分析 /scan 数据，检测机器人前方扇形区域内
+ * 是否有距离在 [min, max] 范围内的障碍物。
+ * 不依赖 costmap，障碍物移走后可立即恢复。
+ */
+bool CorridorController::checkObstacleByLaser(
+  const geometry_msgs::msg::PoseStamped & pose)
+{
+  std::lock_guard<std::mutex> lock(scan_mutex_);
+
+  // 如果没有收到激光数据，回退到 costmap 检测
+  if (!latest_scan_) {
+    return checkObstacleAhead(pose);
+  }
+
+  double robot_x = pose.pose.position.x;
+  double robot_y = pose.pose.position.y;
+  double robot_yaw = tf2::getYaw(pose.pose.orientation);
+
+  const auto & scan = *latest_scan_;
+  double angle_min = scan.angle_min;
+  double angle_increment = scan.angle_increment;
+  double range_min = scan.range_min;
+  double range_max = scan.range_max;
+
+  // 用于调试：记录扇形内最小距离
+  double min_range_in_fov = std::numeric_limits<double>::max();
+  double min_range_angle = 0.0;
+
+  for (size_t i = 0; i < scan.ranges.size(); ++i) {
+    double range = scan.ranges[i];
+
+    // 跳过无效值
+    if (std::isnan(range) || std::isinf(range)) {
+      continue;
+    }
+
+    // 跳过超出激光有效范围的值
+    if (range < range_min || range > range_max) {
+      continue;
+    }
+
+    // 计算该激光束相对于机器人朝向的角度
+    double beam_angle = angle_min + i * angle_increment;
+
+    // 只考虑前方扇形区域内的激光束
+    if (std::abs(beam_angle) > obstacle_detect_angle_ / 2.0) {
+      continue;
+    }
+
+    // 记录扇形内最小距离（用于调试）
+    if (range < min_range_in_fov) {
+      min_range_in_fov = range;
+      min_range_angle = beam_angle;
+    }
+
+    // 如果距离在检测范围内，认为检测到障碍物
+    if (range >= obstacle_detect_range_min_ && range <= obstacle_detect_range_max_) {
+      // 计算障碍物在世界坐标系中的位置
+      double obstacle_x = robot_x + range * std::cos(robot_yaw + beam_angle);
+      double obstacle_y = robot_y + range * std::sin(robot_yaw + beam_angle);
+
+      last_obstacle_pos_.x = obstacle_x;
+      last_obstacle_pos_.y = obstacle_y;
+      last_obstacle_pos_.z = 0.0;
+
+      RCLCPP_DEBUG(logger_,
+        "激光检测到障碍物：距离 %.2f m，角度 %.2f rad，位置 (%.2f, %.2f)",
+        range, beam_angle, obstacle_x, obstacle_y);
+      return true;
+    }
+  }
+
+  // 未检测到障碍物，输出调试信息（每 2 秒一次）
+  static rclcpp::Time last_laser_debug_time = node_.lock()->now();
+  rclcpp::Time now = node_.lock()->now();
+  if ((now - last_laser_debug_time).seconds() > 2.0) {
+    RCLCPP_INFO(logger_,
+      "激光前方无障碍：机器人 (%.2f, %.2f)，扇形内最小距离 %.2f m（角度 %.2f rad）",
+      robot_x, robot_y, min_range_in_fov, min_range_angle);
+    last_laser_debug_time = now;
+  }
+
+  return false;
 }
 
 /**
@@ -344,7 +479,8 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
     throw std::runtime_error("CorridorController: Global plan is empty");
   }
   
- bool obstacle_now = checkObstacleAhead(pose);
+ // 优先使用激光雷达直接检测障碍物，避免 costmap 清除延迟导致无法恢复
+	 bool obstacle_now = checkObstacleByLaser(pose);
 
   // 状态机逻辑
   switch (current_state_) {
@@ -411,47 +547,56 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
         // 障碍物消失，切换到 NORMAL 状态
         current_state_ = ControllerState::NORMAL;
         obstacle_detected_ = false;
-        RCLCPP_INFO(logger_, "✅ 障碍物已消失，恢复正常行驶");
-        
+        RCLCPP_INFO(logger_, "✅ 障碍物已消失，从 STOPPED 恢复正常行驶");
+
         // 继续正常行驶逻辑
         geometry_msgs::msg::Point lookahead_point = getLookaheadPoint(pose, current_plan);
         double robot_x = pose.pose.position.x;
         double robot_y = pose.pose.position.y;
         double robot_yaw = tf2::getYaw(pose.pose.orientation);
-        
+
         double dx = lookahead_point.x - robot_x;
         double dy = lookahead_point.y - robot_y;
         double local_y = std::sin(-robot_yaw) * dx + std::cos(-robot_yaw) * dy;
-        
+
         double L_sq = lookahead_dist_ * lookahead_dist_;
         double kappa = 2.0 * local_y / L_sq;
         double angular_vel = kappa * max_linear_speed_;
         angular_vel = std::clamp(angular_vel, -max_angular_speed_, max_angular_speed_);
-        
+
         double linear_vel = max_linear_speed_;
         if (std::abs(angular_vel) > max_angular_speed_ * 0.8) {
           linear_vel = min_linear_speed_;
         }
         linear_vel = std::min(linear_vel, speed_limit_);
-        
+
         cmd_vel.twist.linear.x = linear_vel;
         cmd_vel.twist.angular.z = angular_vel;
         return cmd_vel;
       } else {
         // 障碍物仍然存在，检查是否超时
         double duration = (node->now() - obstacle_start_time_).seconds();
-        
+
+        // 每 2 秒输出一次停车等待日志
+        static rclcpp::Time last_stopped_log_time = node->now();
+        if ((node->now() - last_stopped_log_time).seconds() > 2.0) {
+          RCLCPP_INFO(logger_,
+            "🛑 停车等待中：障碍物已持续 %.1f 秒，位置 (%.2f, %.2f)",
+            duration, last_obstacle_pos_.x, last_obstacle_pos_.y);
+          last_stopped_log_time = node->now();
+        }
+
         if (duration >= obstacle_warning_duration_) {
           // 超时，切换到 WARNING 状态
           current_state_ = ControllerState::WARNING;
-          RCLCPP_WARN(logger_, 
-            "⚠️ 障碍物持续时间超过 %.1f 秒，进入警告状态", 
+          RCLCPP_WARN(logger_,
+            "⚠️ 障碍物持续时间超过 %.1f 秒，进入警告状态",
             obstacle_warning_duration_);
-          
+
           // 发布警告消息
           publishObstacleWarning(last_obstacle_pos_, duration);
         }
-        
+
         // 返回零速度（继续停车）
         cmd_vel.twist.linear.x = 0.0;
         cmd_vel.twist.angular.z = 0.0;
@@ -464,29 +609,29 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
         // 障碍物消失，切换到 NORMAL 状态
         current_state_ = ControllerState::NORMAL;
         obstacle_detected_ = false;
-        RCLCPP_INFO(logger_, "✅ 障碍物已消失，恢复正常行驶");
-        
+        RCLCPP_INFO(logger_, "✅ 障碍物已消失，从 WARNING 恢复正常行驶");
+
         // 继续正常行驶逻辑（与 STOPPED 状态中的代码相同）
         geometry_msgs::msg::Point lookahead_point = getLookaheadPoint(pose, current_plan);
         double robot_x = pose.pose.position.x;
         double robot_y = pose.pose.position.y;
         double robot_yaw = tf2::getYaw(pose.pose.orientation);
-        
+
         double dx = lookahead_point.x - robot_x;
         double dy = lookahead_point.y - robot_y;
         double local_y = std::sin(-robot_yaw) * dx + std::cos(-robot_yaw) * dy;
-        
+
         double L_sq = lookahead_dist_ * lookahead_dist_;
         double kappa = 2.0 * local_y / L_sq;
         double angular_vel = kappa * max_linear_speed_;
         angular_vel = std::clamp(angular_vel, -max_angular_speed_, max_angular_speed_);
-        
+
         double linear_vel = max_linear_speed_;
         if (std::abs(angular_vel) > max_angular_speed_ * 0.8) {
           linear_vel = min_linear_speed_;
         }
         linear_vel = std::min(linear_vel, speed_limit_);
-        
+
         cmd_vel.twist.linear.x = linear_vel;
         cmd_vel.twist.angular.z = angular_vel;
         return cmd_vel;
@@ -494,7 +639,7 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
         // 障碍物仍然存在，继续发布警告
         double duration = (node->now() - obstacle_start_time_).seconds();
         publishObstacleWarning(last_obstacle_pos_, duration);
-        
+
         // 返回零速度（继续停车）
         cmd_vel.twist.linear.x = 0.0;
         cmd_vel.twist.angular.z = 0.0;

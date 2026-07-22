@@ -12,6 +12,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(nav2_common REQUIRED)
@@ -81,6 +82,7 @@ ament_target_dependencies(corridor_controller
   pluginlib
   geometry_msgs
   nav_msgs
+  sensor_msgs
   tf2
   tf2_ros
 )

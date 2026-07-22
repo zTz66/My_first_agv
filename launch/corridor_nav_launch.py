@@ -65,24 +65,19 @@ def generate_launch_description():
         # ==========================================
         # 1. Robot State Publisher（关键！发布 TF 变换）
         # 使用 xacro 命令处理 URDF 文件，解析 ${namespace} 变量
-        # 延迟 5 秒启动，确保 Gazebo 时钟已就绪
+        # 注意：必须在 Gazebo 启动后再启动导航，确保 /clock 已发布
         # ==========================================
-        TimerAction(
-            period=5.0,
-            actions=[
-                Node(
-                    package='robot_state_publisher',
-                    executable='robot_state_publisher',
-                    name='robot_state_publisher',
-                    output='screen',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'robot_description': Command(['xacro ', urdf_file])
-                    }]
-                ),
-            ]
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'robot_description': Command(['xacro ', urdf_file])
+            }]
         ),
-        
+
         # ==========================================
         # 2. 地图服务器
         # ==========================================
