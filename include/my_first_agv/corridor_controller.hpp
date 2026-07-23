@@ -189,6 +189,22 @@ private:
     const nav_msgs::msg::Path & path);
 
   /**
+   * @brief 计算路径期望航向
+   *
+   * 取 lookahead 点处的路径切线方向。
+   * 当机器人接近路径末端时，自动回退到路径整体方向
+   *（起点指向终点），避免路径末端弯曲导致 Rotation Shim
+   * 与路径跟踪使用不一致的参考方向。
+   *
+   * @param path 全局路径
+   * @param closest_idx 机器人最近路径点索引
+   * @return 路径期望航向（弧度）
+   */
+  double computePathYaw(
+    const nav_msgs::msg::Path & path,
+    size_t closest_idx);
+
+  /**
    * @brief 计算原地旋转速度指令
    *
    * @param angular_distance 需要旋转的有符号角度（已归一化）

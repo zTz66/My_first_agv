@@ -187,25 +187,26 @@ controller_server:
     CorridorFollow:
       plugin: "my_first_agv::CorridorController"
       # 路径跟踪参数
-      lookahead_dist: 0.5              # 前视距离（米）
+      lookahead_dist: 1.2              # 前视距离（米）
       max_linear_speed: 0.22           # 最大线速度（m/s）
       min_linear_speed: 0.05           # 最小线速度（m/s）
       max_angular_speed: 1.0           # 最大角速度（rad/s）
       
       # Rotation Shim 参数（目标点在身后时原地旋转对准路径）
-      angular_dist_threshold: 0.785398      # 触发旋转的航向偏差（45°）
-      angular_disengage_threshold: 0.087266 # 退出旋转的航向偏差（5°）
-      rotate_to_heading_angular_vel: 0.8    # 原地旋转角速度（rad/s）
+      angular_dist_threshold: 0.20      # 触发旋转的航向偏差（45°）
+      angular_disengage_threshold: 0.05 # 退出旋转的航向偏差（5°）
+      rotate_to_heading_angular_vel: 0.4    # 原地旋转角速度（rad/s）
 
       # 路径跟踪控制参数
-      heading_gain: 1.0              # 航向对齐增益
-      cte_gain: 0.5                  # 横向误差纠正增益（保守值，避免 oscillation）
+      heading_gain: 0.8              # 航向对齐增益（提高，让航向更快对准路径）
+      cte_gain: 0.6                  # 横向误差纠正增益（降低，避免一直向中心线过冲）
       max_path_angular_speed: 0.3    # 路径跟踪时最大角速度（rad/s）
 
       # 障碍物检测参数
       obstacle_detect_range_min: 0.20   # 检测最小距离（米）
-      obstacle_detect_range_max: 0.30   # 检测最大距离（米）
+      obstacle_detect_range_max: 0.50   # 检测最大距离（米）
       obstacle_detect_angle: 0.5   # 检测角度（弧度，1.0 = 90°）
+      obstacle_warning_range: 1.5   # 警告距离（米）
       obstacle_warning_duration: 30.0  # 警告超时时间（秒）
 
 local_costmap:

@@ -215,7 +215,19 @@ void CorridorController::setPlan(const nav_msgs::msg::Path & path)
 {
   std::lock_guard<std::mutex> lock(plan_mutex_);
   global_plan_ = path;
-  RCLCPP_DEBUG(logger_, "Received new global plan with %zu points", path.poses.size());
+
+  // 记录全局路径关键信息，便于调试路径方向异常
+  if (path.poses.size() >= 2) {
+    auto & start = path.poses.front();
+    auto & end = path.poses.back();
+    RCLCPP_INFO(logger_,
+      "收到新路径：点数=%zu 起点=(%.2f,%.2f) 终点=(%.2f,%.2f)",
+      path.poses.size(),
+      start.pose.position.x, start.pose.position.y,
+      end.pose.position.x, end.pose.position.y);
+  } else {
+    RCLCPP_WARN(logger_, "收到无效路径：点数=%zu", path.poses.size());
+  }
 
   // 重置状态机
   current_state_ = ControllerState::NORMAL;
@@ -247,6 +259,59 @@ size_t CorridorController::findNearestPathIndex(
   }
 
   return closest_idx;
+}
+
+/**
+ * @brief 计算路径期望航向
+ *
+ * 取 lookahead 点处的路径切线方向。
+ * 接近路径末端时，回退到路径整体方向（起点指向终点），
+ * 避免路径末端弯曲导致 Rotation Shim 与路径跟踪参考方向不一致。
+ */
+double CorridorController::computePathYaw(
+  const nav_msgs::msg::Path & path,
+  size_t closest_idx)
+{
+  size_t lookahead_idx = closest_idx;
+  double accumulated_dist = 0.0;
+  for (size_t i = closest_idx + 1; i < path.poses.size(); ++i) {
+    double seg_dx = path.poses[i].pose.position.x - path.poses[i - 1].pose.position.x;
+    double seg_dy = path.poses[i].pose.position.y - path.poses[i - 1].pose.position.y;
+    accumulated_dist += std::hypot(seg_dx, seg_dy);
+
+    if (accumulated_dist >= lookahead_dist_) {
+      lookahead_idx = i;
+      break;
+    }
+  }
+  if (lookahead_idx == 0 && path.poses.size() > 1) {
+    lookahead_idx = 1;
+  }
+
+  double path_dx = path.poses[lookahead_idx].pose.position.x -
+                   path.poses[lookahead_idx - 1].pose.position.x;
+  double path_dy = path.poses[lookahead_idx].pose.position.y -
+                   path.poses[lookahead_idx - 1].pose.position.y;
+  double path_yaw = std::atan2(path_dy, path_dx);
+
+  // 在路径两端（开头或末尾）切换到路径整体方向，避免路径端点弯曲导致偏航
+  const size_t END_SEGMENT_COUNT = 5;
+  bool near_path_end =
+    path.poses.size() > END_SEGMENT_COUNT &&
+    (closest_idx < END_SEGMENT_COUNT ||
+     closest_idx + END_SEGMENT_COUNT >= path.poses.size());
+
+  if (near_path_end) {
+    double global_dx = path.poses.back().pose.position.x -
+                       path.poses.front().pose.position.x;
+    double global_dy = path.poses.back().pose.position.y -
+                       path.poses.front().pose.position.y;
+    if (std::hypot(global_dx, global_dy) > 0.01) {
+      path_yaw = std::atan2(global_dy, global_dx);
+    }
+  }
+
+  return path_yaw;
 }
 
 /**
@@ -555,33 +620,14 @@ geometry_msgs::msg::TwistStamped CorridorController::computePathTrackingCommand(
   double robot_y = pose.pose.position.y;
   double robot_yaw = tf2::getYaw(pose.pose.orientation);
 
-  // 最近路径点和前视点索引
+  // 最近路径点索引
   size_t closest_idx = findNearestPathIndex(pose, current_plan);
 
-  size_t lookahead_idx = closest_idx;
-  double accumulated_dist = 0.0;
-  for (size_t i = closest_idx + 1; i < current_plan.poses.size(); ++i) {
-    double seg_dx = current_plan.poses[i].pose.position.x -
-                    current_plan.poses[i - 1].pose.position.x;
-    double seg_dy = current_plan.poses[i].pose.position.y -
-                    current_plan.poses[i - 1].pose.position.y;
-    accumulated_dist += std::hypot(seg_dx, seg_dy);
-
-    if (accumulated_dist >= lookahead_dist_) {
-      lookahead_idx = i;
-      break;
-    }
-  }
-  if (lookahead_idx == 0 && current_plan.poses.size() > 1) {
-    lookahead_idx = 1;
-  }
-
-  // 路径在 lookahead 点的切线方向
-  double path_dx = current_plan.poses[lookahead_idx].pose.position.x -
-                   current_plan.poses[lookahead_idx - 1].pose.position.x;
-  double path_dy = current_plan.poses[lookahead_idx].pose.position.y -
-                   current_plan.poses[lookahead_idx - 1].pose.position.y;
-  double path_yaw = std::atan2(path_dy, path_dx);
+  // 路径期望航向（路径两端自动回退到全局方向）
+  double path_yaw = computePathYaw(current_plan, closest_idx);
+  bool using_global_direction =
+    (current_plan.poses.size() > 5 &&
+     (closest_idx < 5 || closest_idx + 5 >= current_plan.poses.size()));
 
   // 航向误差
   double heading_error = normalizeAngle(path_yaw - robot_yaw);
@@ -597,10 +643,7 @@ geometry_msgs::msg::TwistStamped CorridorController::computePathTrackingCommand(
 
   // 角速度：航向对齐 + 横向误差纠正
   // 横向误差项为负：机器人在路径左侧（cte>0）时应向右转（角速度为负）
-  // 乘以 cos(path_yaw) 是为了在路径方向反向（目标点在身后）时自动翻转纠正方向，
-  // 因为此时机器人沿路径反向前进，路径左侧/右侧在世界坐标系中的含义相反
-  double angular_vel = heading_gain_ * heading_error -
-    cte_gain_ * cross_track_error * std::cos(path_yaw);
+  double angular_vel = heading_gain_ * heading_error - cte_gain_ * cross_track_error;
   angular_vel = std::clamp(angular_vel, -max_path_angular_speed_, max_path_angular_speed_);
 
   // 线速度：转向较大时降低速度，给纠正留出时间
@@ -610,8 +653,21 @@ geometry_msgs::msg::TwistStamped CorridorController::computePathTrackingCommand(
   }
   linear_vel = std::min(linear_vel, speed_limit_);
 
+  if (speed_limit_ < max_linear_speed_) {
+    // 如果当前是起步缓冲速度，慢慢往上加，每周期增加 0.01 m/s
+    speed_limit_ = std::min(speed_limit_ + 0.01, max_linear_speed_);
+  }
+  linear_vel = std::min(linear_vel, speed_limit_);
+
   cmd_vel.twist.linear.x = linear_vel;
   cmd_vel.twist.angular.z = angular_vel;
+
+  RCLCPP_INFO(logger_,
+    "tracking: closest=%zu/%zu %spath_yaw=%.2f robot=(%.2f,%.2f) cte=%.3f heading_err=%.3f angular=%.3f linear=%.3f",
+    closest_idx, current_plan.poses.size(),
+    using_global_direction ? "[全局方向] " : "",
+    path_yaw * 180.0 / M_PI,
+    robot_x, robot_y, cross_track_error, heading_error, angular_vel, linear_vel);
 
   return cmd_vel;
 }
@@ -668,30 +724,8 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
   // 计算路径在前视点处的切线方向，用于判断是否需要原地旋转
   size_t closest_idx = findNearestPathIndex(pose, current_plan);
 
-  size_t lookahead_idx = closest_idx;
-  double accumulated_dist = 0.0;
-  for (size_t i = closest_idx + 1; i < current_plan.poses.size(); ++i) {
-    double seg_dx = current_plan.poses[i].pose.position.x -
-                    current_plan.poses[i - 1].pose.position.x;
-    double seg_dy = current_plan.poses[i].pose.position.y -
-                    current_plan.poses[i - 1].pose.position.y;
-    accumulated_dist += std::hypot(seg_dx, seg_dy);
-
-    if (accumulated_dist >= lookahead_dist_) {
-      lookahead_idx = i;
-      break;
-    }
-  }
-  if (lookahead_idx == 0 && current_plan.poses.size() > 1) {
-    lookahead_idx = 1;
-  }
-
-  // 路径切线方向
-  double path_dx = current_plan.poses[lookahead_idx].pose.position.x -
-                   current_plan.poses[lookahead_idx - 1].pose.position.x;
-  double path_dy = current_plan.poses[lookahead_idx].pose.position.y -
-                   current_plan.poses[lookahead_idx - 1].pose.position.y;
-  double path_yaw = std::atan2(path_dy, path_dx);
+  // 路径期望航向（接近目标点时自动回退到全局方向）
+  double path_yaw = computePathYaw(current_plan, closest_idx);
 
   // 航向误差
   double heading_error = normalizeAngle(path_yaw - robot_yaw);
@@ -717,9 +751,14 @@ geometry_msgs::msg::TwistStamped CorridorController::computeVelocityCommands(
     return computeRotateToHeadingCommand(heading_error, pose);
   } else if (in_rotation_) {
     RCLCPP_INFO(logger_,
-      "原地旋转完成：偏差 %.1f°，开始路径跟踪",
-      std::abs(heading_error) * 180.0 / M_PI);
+      "原地旋转完成：机器人 (%.2f,%.2f)，偏差 %.1f°，最近点 %zu，路径方向 %.2f°，路径点数 %zu",
+      pose.pose.position.x, pose.pose.position.y,
+      std::abs(heading_error) * 180.0 / M_PI,
+      closest_idx,
+      path_yaw * 180.0 / M_PI,
+      current_plan.poses.size());
     in_rotation_ = false;
+    speed_limit_ = min_linear_speed_;  // 起步限速
   }
 
   // =====================================================================
