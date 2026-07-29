@@ -57,13 +57,13 @@ def generate_launch_description():
             output='screen'),
         
         # --- 2. 生成 TurtleBot3 机器人模型 ---
-        # 初始位置：(0, -2) 走廊起点
+        # 初始位置：(-5, 0) 走廊起点
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(turtlebot3_gazebo_dir, 'launch', 'spawn_turtlebot3.launch.py')
             ),
             launch_arguments={
-                'x_pose': '-2.0',
+                'x_pose': '-8',
                 'y_pose': '0.0',
                 'z_pose': '0.00',
                 

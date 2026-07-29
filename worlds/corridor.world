@@ -3,7 +3,7 @@
   走廊导航仿真世界（沿 X 轴方向）
   
   走廊结构：
-  - 走廊中心线：y = 0，从 x = -2 到 x = 8
+  - 走廊中心线：y = 0，从 x = -7 到 x = 3
   - 走廊宽度：1.5 米
   - 下墙（原左墙）：y = -0.825
   - 上墙（原右墙）：y = +0.825
@@ -84,24 +84,24 @@
     
     <!-- ============================================ -->
     <!-- 走廊下墙（y 负方向，原左墙概念） -->
-    <!-- 位置：y = -0.825，x 中心 = 3.0 -->
-    <!-- 尺寸：长 10.0m（沿 X），宽 0.15m（沿 Y），高 0.5m -->
+    <!-- 位置：y = -0.825，x 中心 = -2.0 -->
+    <!-- 尺寸：长 6.0m（沿 X），宽 0.15m（沿 Y），高 0.5m -->
     <!-- ============================================ -->
     <model name="corridor_bottom_wall">
       <static>true</static>
-      <pose>3.0 -0.825 0.25 0 0 0</pose>
+      <pose>-2.0 -0.825 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
             <box>
-              <size>10.0 0.15 0.5</size>
+              <size>6.0 0.15 0.5</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>10.0 0.15 0.5</size>
+              <size>6.0 0.15 0.5</size>
             </box>
           </geometry>
           <material>
@@ -114,23 +114,23 @@
     
     <!-- ============================================ -->
     <!-- 走廊上墙（y 正方向，原右墙概念） -->
-    <!-- 位置：y = +0.825，x 中心 = 3.0 -->
+    <!-- 位置：y = +0.825，x 中心 = -2.0 -->
     <!-- ============================================ -->
     <model name="corridor_top_wall">
       <static>true</static>
-      <pose>3.0 0.825 0.25 0 0 0</pose>
+      <pose>-2.0 0.825 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
             <box>
-              <size>10.0 0.15 0.5</size>
+              <size>6.0 0.15 0.5</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <box>
-              <size>10.0 0.15 0.5</size>
+              <size>6.0 0.15 0.5</size>
             </box>
           </geometry>
           <material>
@@ -143,10 +143,10 @@
     
     <!-- ============================================ -->
     <!-- 可移动障碍物（盒子） -->
-    <!-- 初始位置：走廊中间 (0, 0) -->
+    <!-- 初始位置：走廊中间 (-2, 0) -->
     <!-- ============================================ -->
     <model name="obstacle_box">
-      <pose>0.0 0.0 0.15 0 0 0</pose>
+      <pose>-2.0 0.0 0.15 0 0 0</pose>
       <link name="link">
         <inertial>
           <mass>1.0</mass>

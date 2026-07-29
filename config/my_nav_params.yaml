@@ -203,9 +203,9 @@ controller_server:
       max_path_angular_speed: 0.3    # 路径跟踪时最大角速度（rad/s）
 
       # 障碍物检测参数
-      obstacle_detect_range_min: 0.20   # 检测最小距离（米）
-      obstacle_detect_range_max: 0.50   # 检测最大距离（米）
-      obstacle_detect_angle: 0.5   # 检测角度（弧度，1.0 = 90°）
+      obstacle_detect_range_min: 0.1   # 检测最小距离（米）
+      obstacle_detect_range_max: 0.5   # 检测最大距离（米）
+      obstacle_detect_angle: 1.0   # 检测角度（弧度，1.0 = 90°）
       obstacle_warning_range: 1.5   # 警告距离（米）
       obstacle_warning_duration: 30.0  # 警告超时时间（秒）
 
@@ -221,7 +221,7 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.22
+      robot_radius: 0.25
       # 局部 costmap 也包含静态地图层，确保激光未扫到的墙也能被识别
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
       inflation_layer:
@@ -262,7 +262,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      robot_radius: 0.22
+      robot_radius: 0.5
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer", "canyon_layer"]
@@ -274,9 +274,9 @@ global_costmap:
         plugin: "my_first_agv::CanyonLayer"
         corridor_enabled: true                    # 启用走廊约束
         corridor_width: 1.5                       # 走廊宽度（米）
-        # 走廊航点：从 (0, -2) 到 (0, 8) 的直线走廊（沿 Y 轴）
+        # 走廊航点：从 (-5, 0) 到 (1, 0) 的直线走廊（沿 X 轴）
         # 格式：[x1, y1, x2, y2, ...]
-        corridor_waypoints: [-2.0, 0.0, 8.0, 0.0]
+        corridor_waypoints: [-5.0, 0.0, 1.0, 0.0]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True

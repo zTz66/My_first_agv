@@ -6,9 +6,9 @@
 输出：corridor_map.pgm（地图图像）和 corridor_map.yaml（地图配置）
 
 地图坐标系说明：
-- 原点 origin = [-5.0, -5.0, 0.0]  表示地图左下角在世界坐标 (x=-5, y=-5) 处
+- 原点 origin = [-9.5, -7.5, 0.0]  表示地图左下角在世界坐标 (x=-9.5, y=-7.5) 处
 - 分辨率 resolution = 0.05          每个像素代表 0.05 米
-- 地图尺寸：10m x 10m               即 200 x 200 像素
+- 地图尺寸：15m x 15m               即 300 x 300 像素
 
 颜色规则：
 - 白色 (255) = 自由空间（机器人可通行）
@@ -22,16 +22,16 @@ import os
 # ==========================================
 # 地图参数配置（与 corridor.world 对应）
 # ==========================================
-MAP_SIZE_M = 10.0          # 地图边长（米）
+MAP_SIZE_M = 15.0          # 地图边长（米）
 RESOLUTION = 0.05          # 分辨率（米/像素）
-ORIGIN_X = -5.0            # 地图原点 X 坐标（世界坐标系）
-ORIGIN_Y = -5.0            # 地图原点 Y 坐标（世界坐标系）
+ORIGIN_X = -9.5            # 地图原点 X 坐标（世界坐标系），走廊居中
+ORIGIN_Y = -7.5            # 地图原点 Y 坐标（世界坐标系）
 
 # 走廊参数（与 corridor.world 完全一致）
-CORRIDOR_LENGTH = 8.0     # 走廊长度（米）
+CORRIDOR_LENGTH = 6.0     # 走廊长度（米），与 corridor.world 墙壁尺寸一致
 CORRIDOR_WIDTH = 1.5       # 走廊宽度（米）
 WALL_THICKNESS = 0.15      # 墙壁厚度（米）
-CORRIDOR_CENTER_X = 4.0    # 走廊中心 X 坐标
+CORRIDOR_CENTER_X = -2.0   # 走廊中心 X 坐标（与 Gazebo 墙壁 pose x=-2.0 一致）
 CORRIDOR_CENTER_Y = 0.0    # 走廊中心 Y 坐标
 
 
@@ -103,10 +103,10 @@ draw_wall(map_data, wall_x_min, wall_x_max, right_wall_y_min, right_wall_y_max)
 # 在地图边缘绘制边界墙（模拟房间外墙）
 # ==========================================
 print("绘制边界...")
-draw_wall(map_data, -5.0, 5.0, 4.9, 5.0)    # 上边界
-draw_wall(map_data, -5.0, 5.0, -5.0, -4.9)  # 下边界
-draw_wall(map_data, -5.0, -4.9, -5.0, 5.0)  # 左边界
-draw_wall(map_data, 4.9, 5.0, -5.0, 5.0)    # 右边界
+draw_wall(map_data, -9.5, 5.5, 7.4, 7.5)        # 上边界
+draw_wall(map_data, -9.5, 5.5, -7.5, -7.4)       # 下边界
+draw_wall(map_data, -9.5, -9.4, -7.5, 7.5)       # 左边界
+draw_wall(map_data, 5.4, 5.5, -7.5, 7.5)         # 右边界
 
 # ==========================================
 # 保存地图图像（PGM 格式）
