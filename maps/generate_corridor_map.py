@@ -28,11 +28,16 @@ ORIGIN_X = -9.5            # 地图原点 X 坐标（世界坐标系），走廊
 ORIGIN_Y = -7.5            # 地图原点 Y 坐标（世界坐标系）
 
 # 走廊参数（与 corridor.world 完全一致）
-CORRIDOR_LENGTH = 6.0     # 走廊长度（米），与 corridor.world 墙壁尺寸一致
 CORRIDOR_WIDTH = 1.5       # 走廊宽度（米）
 WALL_THICKNESS = 0.15      # 墙壁厚度（米）
-CORRIDOR_CENTER_X = -2.0   # 走廊中心 X 坐标（与 Gazebo 墙壁 pose x=-2.0 一致）
-CORRIDOR_CENTER_Y = 0.0    # 走廊中心 Y 坐标
+
+# Z 形走廊三段中心线端点（与 corridor.world 完全一致）
+# 段1：(-5,0) → (-2,0)   段2：(-2,0) → (-2,-3)   段3：(-2,-3) → (1,-3)
+SEGMENTS = [
+    [(-5.0, 0.0), (-2.0, 0.0)],   # 段1 水平
+    [(-2.0, 0.0), (-2.0, -3.0)],  # 段2 垂直
+    [(-2.0, -3.0), (1.0, -3.0)],  # 段3 水平
+]
 
 
 # ==========================================
@@ -61,18 +66,24 @@ def world_to_pixel(wx, wy):
     return px, py
 
 # ==========================================
-# 计算墙壁的世界坐标范围
+# 计算 Z 形走廊各段侧墙的世界坐标范围
+# 半宽 0.75，半墙厚 0.075（与 corridor.world 完全一致）
 # ==========================================
-# 左墙：y 范围 [-0.9, -0.75]
-left_wall_y_min = -CORRIDOR_CENTER_Y - CORRIDOR_WIDTH/2 - WALL_THICKNESS
-left_wall_y_max = -CORRIDOR_CENTER_Y - CORRIDOR_WIDTH/2
-# 右墙：y 范围 [0.75, 0.9]
-right_wall_y_min = CORRIDOR_CENTER_Y + CORRIDOR_WIDTH/2
-right_wall_y_max = CORRIDOR_CENTER_Y + CORRIDOR_WIDTH/2 + WALL_THICKNESS
+HALF = CORRIDOR_WIDTH / 2.0    # 0.75
+TH = WALL_THICKNESS / 2.0      # 0.075
 
-# 走廊 X 范围（墙的长度）
-wall_x_min = CORRIDOR_CENTER_X - CORRIDOR_LENGTH/2  # -2.0
-wall_x_max = CORRIDOR_CENTER_X + CORRIDOR_LENGTH/2  # 8.0
+# 段1（水平，y=0，x∈[-5,-2]）：上下墙
+seg1_bottom = (-5.0, -2.0, -HALF - TH, -HALF)          # y∈[-0.825,-0.75]
+seg1_top    = (-5.0, -2.0,  HALF, HALF + TH)           # y∈[0.75,0.825]
+# 段2（垂直，x=-2，y∈[-3,0]）：左右墙
+seg2_left   = (-2.0 - HALF - TH, -2.0 - HALF, -3.0, 0.0)  # x∈[-2.825,-2.75]
+seg2_right  = (-2.0 + HALF, -2.0 + HALF + TH, -3.0, 0.0)  # x∈[-1.25,-1.175]
+# 段3（水平，y=-3，x∈[-2,1]）：上下墙
+seg3_bottom = (-2.0, 1.0, -3.0 - HALF - TH, -3.0 - HALF)  # y∈[-3.825,-3.75]
+seg3_top    = (-2.0, 1.0, -3.0 + HALF, -3.0 + HALF + TH)  # y∈[-2.25,-2.175]
+# 拐角外沿填充墙（补齐直角转弯的外侧缺口）
+corner1_fill = (-2.0, -1.175, 0.0, 0.825)     # 拐角1（(-2,0) 右转）外沿
+corner2_fill = (-2.825, -2.0, -3.825, -3.0)   # 拐角2（(-2,-3) 左转）外沿
 
 # ==========================================
 # 绘制墙壁的函数
@@ -90,13 +101,13 @@ def draw_wall(map_array, x_min, x_max, y_min, y_max):
     map_array[py_min:py_max, px_min:px_max] = 0
 
 # ==========================================
-# 绘制走廊墙壁
+# 绘制 Z 形走廊的 8 面墙
 # ==========================================
-print("绘制左墙...")
-draw_wall(map_data, wall_x_min, wall_x_max, left_wall_y_min, left_wall_y_max)
-
-print("绘制右墙...")
-draw_wall(map_data, wall_x_min, wall_x_max, right_wall_y_min, right_wall_y_max)
+print("绘制 Z 形走廊墙体（8 面墙）...")
+walls = [seg1_bottom, seg1_top, seg2_left, seg2_right,
+         seg3_bottom, seg3_top, corner1_fill, corner2_fill]
+for w in walls:
+    draw_wall(map_data, *w)
 
 
 # ==========================================
@@ -140,4 +151,4 @@ print("\n✅ 地图生成完成！")
 print(f"   地图尺寸: {MAP_SIZE_M}m x {MAP_SIZE_M}m")
 print(f"   分辨率: {RESOLUTION}m/像素")
 print(f"   走廊宽度: {CORRIDOR_WIDTH}m")
-print(f"   走廊长度: {CORRIDOR_LENGTH}m")
+print(f"   走廊形状: Z 形（三段折线）")
