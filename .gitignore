@@ -1,0 +1,11 @@
+# IDE 本地配置
+.qoder/
+.vscode/
+.idea/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 编译产物
+build/

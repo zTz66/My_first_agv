@@ -8,6 +8,7 @@
 
 #include "my_first_agv/canyon_layer.hpp"
 #include "nav2_costmap_2d/costmap_math.hpp"
+#include "nav2_util/node_utils.hpp"
 #include <algorithm>
 #include <limits>
 #include <cmath>
@@ -56,15 +57,22 @@ void CanyonLayer::onInitialize()
   }
   
   // 声明并读取参数
-  // 注意：这些参数需要在 my_nav_params.yaml 中配置
-  node->get_parameter_or("corridor_enabled", corridor_enabled_, true);
-  node->get_parameter_or("corridor_width", corridor_width_, 1.5);
+  // 注意：必须先用 declare_parameter_if_not_declared 声明，
+  //       my_nav_params.yaml 中的覆盖值才会生效（rclcpp 默认不自动声明参数覆盖值）
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".corridor_enabled", rclcpp::ParameterValue(corridor_enabled_));
+  node->get_parameter(name_ + ".corridor_enabled", corridor_enabled_);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".corridor_width", rclcpp::ParameterValue(corridor_width_));
+  node->get_parameter(name_ + ".corridor_width", corridor_width_);
   corridor_half_width_ = corridor_width_ / 2.0;
   
   // 读取走廊航点（一维数组，格式 [x1, y1, x2, y2, ...]）
   // 例如：[-2.0, 0.0, 8.0, 0.0] 表示从 (-2, 0) 到 (8, 0) 的直线走廊
   std::vector<double> waypoints_raw;
-  node->get_parameter_or("corridor_waypoints", waypoints_raw, std::vector<double>{});
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".corridor_waypoints", rclcpp::ParameterValue(std::vector<double>{}));
+  node->get_parameter(name_ + ".corridor_waypoints", waypoints_raw);
   
   // 将一维数组转换为航点列表
   waypoints_.clear();

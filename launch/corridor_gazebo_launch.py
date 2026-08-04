@@ -1,28 +1,3 @@
-"""
-走廊导航系统 - Gazebo 仿真环境启动脚本
-
-功能说明：
-1. 启动 Gazebo 仿真环境（使用自定义走廊世界）
-2. 生成 TurtleBot3 机器人模型
-
-使用方法：
-  # 步骤 1：设置环境变量
-  export TURTLEBOT3_MODEL=burger
-  
-  # 步骤 2：启动 Gazebo 仿真环境
-  ros2 launch my_first_agv corridor_gazebo_launch.py
-  
-  # 步骤 3：等待 Gazebo 完全加载（约 5-10 秒）
-  
-  # 步骤 4：在另一个终端启动导航系统
-  ros2 launch my_first_agv corridor_nav_launch.py
-
-注意：
-  - 此脚本仅启动 Gazebo 仿真环境，不包含导航节点
-  - 导航节点需要在另一个终端中单独启动
-  - 这样可以避免同时启动导致系统卡顿
-"""
-
 import os
 from launch import LaunchDescription
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
@@ -57,13 +32,15 @@ def generate_launch_description():
             output='screen'),
         
         # --- 2. 生成 TurtleBot3 机器人模型 ---
-        # 初始位置：(-5, 0) 走廊起点
+        # 初始位置：(-4.5, 0) 走廊起点
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(turtlebot3_gazebo_dir, 'launch', 'spawn_turtlebot3.launch.py')
             ),
             launch_arguments={
-                'x_pose': '-8',
+                # 机器人出生位置必须在走廊范围内（x∈[-5,1]），
+                # 否则 CanyonLayer 会把起点标记为致命代价导致无法规划
+                'x_pose': '-4.5',
                 'y_pose': '0.0',
                 'z_pose': '0.00',
                 

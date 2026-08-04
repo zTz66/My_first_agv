@@ -1,28 +1,3 @@
-"""
-走廊导航系统启动脚本（不含 Gazebo）
-
-功能说明：
-1. 启动地图服务器
-2. 启动 AMCL 定位节点
-3. 启动规划器服务器
-4. 启动控制器服务器（使用走廊控制器）
-5. 启动行为树导航器
-6. 启动生命周期管理器
-7. 启动 RViz2 可视化
-
-使用方法：
-  # 步骤 1：先启动 Gazebo（在另一个终端）
-  export TURTLEBOT3_MODEL=burger
-  ros2 launch my_first_agv corridor_gazebo_launch.py
-  
-  # 步骤 2：等待 Gazebo 完全加载后，再启动导航
-  ros2 launch my_first_agv corridor_nav_launch.py
-
-注意：
-  - 此脚本不包含 Gazebo，需要单独启动
-  - 这样可以避免同时启动导致卡顿
-"""
-
 import os
 from launch import LaunchDescription
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, Command

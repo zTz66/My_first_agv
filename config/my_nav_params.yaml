@@ -221,7 +221,7 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.25
+      robot_radius: 0.22
       # 局部 costmap 也包含静态地图层，确保激光未扫到的墙也能被识别
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
       inflation_layer:
@@ -262,7 +262,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      robot_radius: 0.5
+      robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer", "canyon_layer"]
@@ -272,7 +272,7 @@ global_costmap:
       # ==========================================
       canyon_layer:
         plugin: "my_first_agv::CanyonLayer"
-        corridor_enabled: true                    # 启用走廊约束
+        corridor_enabled: false                    # 启用走廊约束
         corridor_width: 1.5                       # 走廊宽度（米）
         # 走廊航点：从 (-5, 0) 到 (1, 0) 的直线走廊（沿 X 轴）
         # 格式：[x1, y1, x2, y2, ...]
@@ -322,10 +322,22 @@ planner_server:
     use_sim_time: True
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
+      plugin: "nav2_smac_planner/SmacPlannerHybrid"
       tolerance: 0.5
-      use_astar: false
       allow_unknown: true
+      max_iterations: 1000000
+      max_planning_time: 5.0
+      motion_model_for_search: "REEDS_SHEPP"
+      angle_quantization_bins: 72
+      minimum_turning_radius: 0.4
+      cache_obstacle_heuristic: true
+      reverse_penalty: 2.0
+      smooth_path: true  
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
 
 smoother_server:
   ros__parameters:
