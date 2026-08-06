@@ -29,11 +29,11 @@
       </RateController> 
       -->
       
-      <!-- 使用走廊控制器跟随路径 -->
+      <!-- 使用 DWB 控制器跟随路径 -->
       <!-- 注意：这里没有 RecoveryNode 包裹，所以控制器异常会直接导致导航失败 -->
       <FollowPath 
         path="{path}" 
-        controller_id="CorridorFollow"
+        controller_id="FollowPath"
         goal_checker_id="general_goal_checker"/>
     </PipelineSequence>
   </BehaviorTree>

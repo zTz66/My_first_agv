@@ -120,12 +120,12 @@ controller_server:
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker"
-    controller_plugins: ["CorridorFollow"]
+    controller_plugins: ["FollowPath"]
 
     # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5
+      required_movement_radius: 0.25
       movement_time_allowance: 60.0
     # Goal checker parameters
     #precise_goal_checker:
@@ -138,17 +138,17 @@ controller_server:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.25
-    # DWB parameters (保留作为备份)
+    # DWB 局部控制器（当前激活）
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.26
+      max_vel_x: 0.16
       max_vel_y: 0.0
       max_vel_theta: 1.0
       min_speed_xy: 0.0
-      max_speed_xy: 0.26
+      max_speed_xy: 0.16
       min_speed_theta: 0.0
       # Add high threshold velocity for turtlebot 3 issue.
       # https://github.com/ROBOTIS-GIT/turtlebot3_simulations/issues/75
@@ -158,24 +158,26 @@ controller_server:
       decel_lim_x: -2.5
       decel_lim_y: 0.0
       decel_lim_theta: -3.2
-      vx_samples: 20
-      vy_samples: 5
-      vtheta_samples: 20
-      sim_time: 1.7
+      vx_samples: 12        #前进速度采样数
+      vy_samples: 5         #横向速度采样数
+      vtheta_samples: 12    #角速度采样数
+      sim_time: 1.5
       linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 0.2
       xy_goal_tolerance: 0.25
-      trans_stopped_velocity: 0.25
+      trans_stopped_velocity: 0.1
       short_circuit_trajectory_evaluation: True
       stateful: True
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.02
-      PathAlign.scale: 32.0
-      PathAlign.forward_point_distance: 0.1
+      # 前视距离是关键：0.1m 时 PathAlign 只"看"机器人鼻尖处的路径，
+      # 横向偏差一小点就会要求大角度转向 → 过冲 → S 形摆动。加大到 0.6m 平滑对齐。
+      BaseObstacle.scale: 2.0
+      PathAlign.scale: 50.0
+      PathAlign.forward_point_distance: 0.6
       GoalAlign.scale: 24.0
-      GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0
+      GoalAlign.forward_point_distance: 0.5
+      PathDist.scale: 50.0
       GoalDist.scale: 24.0
       RotateToGoal.scale: 32.0
       RotateToGoal.slowing_factor: 5.0
@@ -198,8 +200,8 @@ controller_server:
       rotate_to_heading_angular_vel: 0.4    # 原地旋转角速度（rad/s）
 
       # 路径跟踪控制参数
-      heading_gain: 0.8              # 航向对齐增益（提高，让航向更快对准路径）
-      cte_gain: 0.6                  # 横向误差纠正增益（降低，避免一直向中心线过冲）
+      heading_gain: 0.6              # 航向对齐增益（提高，让航向更快对准路径）
+      cte_gain: 1.0                  # 横向误差纠正增益（降低，避免一直向中心线过冲）
       max_path_angular_speed: 0.3    # 路径跟踪时最大角速度（rad/s）
 
       # 障碍物检测参数
@@ -226,8 +228,9 @@ local_costmap:
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 10.0
-        inflation_radius: 0.20
+        # 膨胀半径必须大于机器人半径(0.22)，否则墙体危险区比车体还小，DWB 无安全轨迹可选
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.5
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -244,10 +247,10 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          # 增大射线追踪距离，确保障碍物移走后 costmap 能及时清除
-          raytrace_max_range: 2.5
+          # 射线追踪距离
+          raytrace_max_range: 3.5
           raytrace_min_range: 0.2
-          obstacle_max_range: 2.5
+          obstacle_max_range: 3.5
           obstacle_min_range: 0.2
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -265,40 +268,46 @@ global_costmap:
       robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer", "inflation_layer", "canyon_layer"]
+      plugins: ["static_layer", "canyon_layer", "inflation_layer"]
       
       # ==========================================
       # 走廊约束层参数配置（沿 Y 轴方向）
       # ==========================================
       canyon_layer:
         plugin: "my_first_agv::CanyonLayer"
-        corridor_enabled: false                    # 启用走廊约束
+        corridor_enabled: true                     # 启用走廊约束
         corridor_width: 1.5                       # 走廊宽度（米）
+        outer_corridor_cost: 128                  # 走廊外代价值（可走但代价高，不是致命障碍254）
+        corridor_center_free_band: 0.25           # 中心线免费带宽（米）：该带宽内0代价，之外向走廊边界线性升到 outer_corridor_cost
         # 走廊航点：Z 形走廊三段中心线，从 (-5,0) 经 (-2,0)、(-2,-3) 到 (1,-3)
         # 格式：[x1, y1, x2, y2, ...]
         corridor_waypoints: [-5.0, 0.0, -2.0, 0.0, -2.0, -3.0, 1.0, -3.0]
-      obstacle_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: True
-        observation_sources: scan
-        scan:
-          topic: /scan
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
-          data_type: "LaserScan"
-          # 增大射线追踪距离，确保障碍物移走后 costmap 能及时清除
-          raytrace_max_range: 2.5
-          raytrace_min_range: 0.2
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.2
+      # ==========================================
+      # 动态障碍层（已禁用）：global 不再处理激光，降低 update 开销
+      # 动态障碍物检测交由 local costmap 的 voxel_layer 负责（DWB 实时避障）
+      # ==========================================
+      #obstacle_layer:
+      #  plugin: "nav2_costmap_2d::ObstacleLayer"
+      #  enabled: True
+      #  observation_sources: scan
+      #  scan:
+      #    topic: /scan
+      #    max_obstacle_height: 2.0
+      #    clearing: True
+      #    marking: True
+      #    data_type: "LaserScan"
+      #    # 增大射线追踪距离，确保障碍物移走后 costmap 能及时清除
+      #    raytrace_max_range: 3.5
+      #    raytrace_min_range: 0.2
+      #    obstacle_max_range: 3.5
+      #    obstacle_min_range: 0.2
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 10.0
-        inflation_radius: 0.20
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.5
       always_send_full_costmap: True
 
 map_server:
@@ -324,30 +333,33 @@ planner_server:
     GridBased:
       plugin: "nav2_smac_planner/SmacPlannerHybrid"
       tolerance: 0.5
-      allow_unknown: true
-      max_iterations: 1000000
-      max_planning_time: 5.0
-      motion_model_for_search: "REEDS_SHEPP"
+      allow_unknown: false
+      max_iterations: 200000
+      max_planning_time: 2.0
+      motion_model_for_search: "DUBIN"
+      lookup_table_size: 8.0
       angle_quantization_bins: 72
       minimum_turning_radius: 0.4
       cache_obstacle_heuristic: true
       reverse_penalty: 2.0
+      cost_penalty: 4.0
+      cost_travel_multiplier: 3.0
       smooth_path: true  
       smoother:
         max_iterations: 1000
-        w_smooth: 0.3
-        w_data: 0.2
+        w_smooth: 0.1
+        w_data: 0.8
         tolerance: 1.0e-10
 
-smoother_server:
-  ros__parameters:
-    use_sim_time: True
-    smoother_plugins: ["simple_smoother"]
-    simple_smoother:
-      plugin: "nav2_smoother::SimpleSmoother"
-      tolerance: 1.0e-10
-      max_its: 1000
-      do_refinement: True
+#smoother_server:
+#  ros__parameters:
+#    use_sim_time: True
+#    smoother_plugins: ["simple_smoother"]
+#    simple_smoother:
+#      plugin: "nav2_smoother::SimpleSmoother"
+#      tolerance: 1.0e-10
+#      max_its: 1000
+#      do_refinement: True
 
 behavior_server:
   ros__parameters:

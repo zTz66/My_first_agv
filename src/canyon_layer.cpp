@@ -28,6 +28,8 @@ CanyonLayer::CanyonLayer()
 : corridor_enabled_(true),
   corridor_width_(1.5),
   corridor_half_width_(0.75),
+  outer_corridor_cost_(128),
+  corridor_center_free_band_(0.25),
   corridor_min_x_(0.0),
   corridor_min_y_(0.0),
   corridor_max_x_(0.0),
@@ -66,6 +68,23 @@ void CanyonLayer::onInitialize()
     node, name_ + ".corridor_width", rclcpp::ParameterValue(corridor_width_));
   node->get_parameter(name_ + ".corridor_width", corridor_width_);
   corridor_half_width_ = corridor_width_ / 2.0;
+
+  // 走廊外区域代价值（默认128：可走但代价高，不是致命障碍254）
+  int outer_cost = static_cast<int>(outer_corridor_cost_);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".outer_corridor_cost", rclcpp::ParameterValue(outer_cost));
+  node->get_parameter(name_ + ".outer_corridor_cost", outer_cost);
+  // 限制在有效代价范围 [0, 252]，避免覆盖致命/未知值
+  outer_corridor_cost_ = static_cast<unsigned char>(
+    std::max(0, std::min(252, outer_cost)));
+
+  // 走廊中心线免费带宽（默认0.25m）：该带宽内为0代价，
+  // 之外向走廊边界线性升到 outer_corridor_cost_，形成中心"山谷"，
+  // 让全局规划器倾向沿走廊中心线走，而不是斜切贴墙。
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".corridor_center_free_band", rclcpp::ParameterValue(corridor_center_free_band_));
+  node->get_parameter(name_ + ".corridor_center_free_band", corridor_center_free_band_);
+  corridor_center_free_band_ = std::max(0.0, std::min(corridor_center_free_band_, corridor_half_width_));
   
   // 读取走廊航点（一维数组，格式 [x1, y1, x2, y2, ...]）
   // 例如：[-2.0, 0.0, 8.0, 0.0] 表示从 (-2, 0) 到 (8, 0) 的直线走廊
@@ -88,9 +107,10 @@ void CanyonLayer::onInitialize()
   
   // 输出初始化信息
   RCLCPP_INFO(node->get_logger(), 
-    "CanyonLayer initialized: enabled=%s, width=%.2f, waypoints=%zu",
+    "CanyonLayer initialized: enabled=%s, width=%.2f, outer_cost=%u, waypoints=%zu",
     corridor_enabled_ ? "true" : "false",
     corridor_width_,
+    outer_corridor_cost_,
     waypoints_.size());
   
   if (!waypoints_.empty()) {
@@ -294,7 +314,9 @@ void CanyonLayer::updateBounds(double /*robot_x*/, double /*robot_y*/, double /*
  * 1. 遍历指定范围内的所有栅格
  * 2. 将栅格坐标转换为世界坐标
  * 3. 计算该点到走廊中心线的距离
- * 4. 如果距离大于走廊半宽，标记为致命障碍
+ * 4. 走廊内：中心线免费带内为0代价，向走廊边界线性升到走廊外代价值
+ *    （形成中心"山谷"，让全局规划器倾向沿中心线走，避免斜切贴墙）
+ * 5. 走廊外：标记为配置的中高代价值（默认128），不是致命障碍
  */
 void CanyonLayer::updateCosts(nav2_costmap_2d::Costmap2D & master_grid,
                                int min_x, int min_y, int max_x, int max_y)
@@ -309,7 +331,12 @@ void CanyonLayer::updateCosts(nav2_costmap_2d::Costmap2D & master_grid,
   double resolution = master_grid.getResolution();  // 每个栅格的边长（米）
   double origin_x = master_grid.getOriginX();       // 地图原点的 X 坐标
   double origin_y = master_grid.getOriginY();       // 地图原点的 Y 坐标
-  
+
+  // 梯度区间长度（免费带之外到走廊边界）
+  double gradient_span = corridor_half_width_ - corridor_center_free_band_;
+  // 防御：如果免费带不小于半宽，则退化为仅在走廊外设置代价
+  bool has_gradient = gradient_span > 1e-6;
+
   // 遍历指定范围内的所有栅格
   for (int x = min_x; x < max_x; ++x) {
     for (int y = min_y; y < max_y; ++y) {
@@ -320,12 +347,31 @@ void CanyonLayer::updateCosts(nav2_costmap_2d::Costmap2D & master_grid,
       
       // 计算该点到走廊中心线的最短距离
       double dist = distanceToCorridorCenter(wx, wy);
+      unsigned int index = master_grid.getIndex(x, y);
       
-      // 如果距离大于走廊半宽，说明该点在走廊外
-      // 将其标记为致命障碍（LETHAL_OBSTACLE = 254）
-      if (dist > corridor_half_width_) {
-        unsigned int index = master_grid.getIndex(x, y);
-        master_array[index] = LETHAL_OBSTACLE;
+      // 走廊内
+      if (dist <= corridor_half_width_) {
+        // 中心线免费带内：保持 0 代价，但不覆盖已有更高代价（如墙壁254）
+        if (has_gradient && dist > corridor_center_free_band_) {
+          // 线性梯度：从免费带边界(0代价)升到走廊边界(走廊外代价值)
+          double ratio = (dist - corridor_center_free_band_) / gradient_span;
+          unsigned char gradient_cost = static_cast<unsigned char>(
+            std::min(252.0, outer_corridor_cost_ * ratio));
+          if (master_array[index] < gradient_cost) {
+            master_array[index] = gradient_cost;
+          }
+        }
+        continue;
+      }
+      
+      // 走廊外：标记为配置的中高代价值（默认128），不是致命障碍
+      // 规划器会尽量避免，但在必要时仍可穿越
+      // 关键修复：绝不能把"已经比走廊代价值更贵"的栅格改低。
+      // 走廊墙体距中心线 0.75~0.825m，会被误判为"走廊外"，
+      // 若直接覆盖，static/obstacle 层标记的墙壁(致命254)会变成 128 可通行，
+      // 全局路径就会斜穿墙壁，导致机器人贴墙。
+      if (master_array[index] < outer_corridor_cost_) {
+        master_array[index] = outer_corridor_cost_;
       }
     }
   }

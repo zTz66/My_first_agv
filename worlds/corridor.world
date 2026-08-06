@@ -10,7 +10,10 @@
   走廊结构：
   - 走廊宽度：1.5m（半宽 0.75）
   - 墙厚：0.15m，墙高：0.5m
-  - 8 面墙：每段 2 面侧墙 + 2 个拐角外沿填充墙
+  - 6 面墙：每段 2 面侧墙（拐角填充墙已删，相邻侧墙在拐角处直接连接成直角）
+  - 段2西侧墙顶部缩到 y=-0.75、段1南墙东端缩到 x=-2.75，去掉伸进对方走廊的交叉延伸
+  - 拐角1：段1北墙东延到 x=-1.1、段2东墙顶延到 y=0.9，连接成东北外角
+  - 拐角2：段2西墙底延到 y=-3.9、段3南墙西延到 x=-2.9，连接成西南外角
 -->
 <sdf version="1.5">
   <world name="corridor_world">
@@ -87,18 +90,19 @@
     </model>
     
     <!-- ============================================ -->
-    <!-- Z 形走廊墙体（8 面墙） -->
+    <!-- Z 形走廊墙体（6 面墙） -->
     <!-- 段1（水平，y=0，x∈[-5,-2]） -->
     <!-- ============================================ -->
     <model name="seg1_bottom_wall">
       <static>true</static>
-      <pose>-3.5 -0.825 0.25 0 0 0</pose>
+      <!-- 东端从 x=-2 缩到 x=-2.75（与段2西墙东侧齐平）：去掉伸进走廊2的延伸 -->
+      <pose>-3.875 -0.825 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>2.25 0.15 0.5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>2.25 0.15 0.5</size></box></geometry>
           <material>
             <ambient>0.6 0.6 0.6 1</ambient>
             <diffuse>0.6 0.6 0.6 1</diffuse>
@@ -109,13 +113,14 @@
     
     <model name="seg1_top_wall">
       <static>true</static>
-      <pose>-3.5 0.825 0.25 0 0 0</pose>
+      <!-- 东端从 x=-2 延到 x=-1.1（与段2东墙连接），封闭拐角1东北外角 -->
+      <pose>-3.05 0.825 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>3.9 0.15 0.5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>3.9 0.15 0.5</size></box></geometry>
           <material>
             <ambient>0.6 0.6 0.6 1</ambient>
             <diffuse>0.6 0.6 0.6 1</diffuse>
@@ -126,16 +131,17 @@
     
     <!-- ============================================ -->
     <!-- 段2（垂直，x=-2，y∈[-3,0]） -->
+    <!-- 西侧墙顶部缩到 y=-0.75（与段1南墙齐平）、底部延到 y=-3.9（与段3南墙连接，封闭拐角2西南外角） -->
     <!-- ============================================ -->
     <model name="seg2_left_wall">
       <static>true</static>
-      <pose>-2.825 -1.5 0.25 0 0 0</pose>
+      <pose>-2.825 -2.325 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>0.15 3.0 0.5</size></box></geometry>
+          <geometry><box><size>0.15 3.15 0.5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>0.15 3.0 0.5</size></box></geometry>
+          <geometry><box><size>0.15 3.15 0.5</size></box></geometry>
           <material>
             <ambient>0.6 0.6 0.6 1</ambient>
             <diffuse>0.6 0.6 0.6 1</diffuse>
@@ -146,13 +152,14 @@
     
     <model name="seg2_right_wall">
       <static>true</static>
-      <pose>-1.175 -1.5 0.25 0 0 0</pose>
+      <!-- 段2东侧墙（x∈[-1.25,-1.1]，y∈[-2.25,0.9]）：底部缩到 y=-2.25 让出走廊3入口，顶部延到 y=0.9 与段1北墙连接（封闭拐角1东北外角） -->
+      <pose>-1.175 -0.675 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>0.15 3.0 0.5</size></box></geometry>
+          <geometry><box><size>0.15 3.15 0.5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>0.15 3.0 0.5</size></box></geometry>
+          <geometry><box><size>0.15 3.15 0.5</size></box></geometry>
           <material>
             <ambient>0.6 0.6 0.6 1</ambient>
             <diffuse>0.6 0.6 0.6 1</diffuse>
@@ -166,13 +173,14 @@
     <!-- ============================================ -->
     <model name="seg3_bottom_wall">
       <static>true</static>
-      <pose>-0.5 -3.825 0.25 0 0 0</pose>
+      <!-- 西端从 x=-2 延到 x=-2.9（与段2西墙连接），封闭拐角2西南外角 -->
+      <pose>-0.95 -3.825 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>3.9 0.15 0.5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>3.9 0.15 0.5</size></box></geometry>
           <material>
             <ambient>0.6 0.6 0.6 1</ambient>
             <diffuse>0.6 0.6 0.6 1</diffuse>
@@ -183,52 +191,13 @@
     
     <model name="seg3_top_wall">
       <static>true</static>
-      <pose>-0.5 -2.175 0.25 0 0 0</pose>
+      <pose>0.0 -2.175 0.25 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
+          <geometry><box><size>2.0 0.15 0.5</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>3.0 0.15 0.5</size></box></geometry>
-          <material>
-            <ambient>0.6 0.6 0.6 1</ambient>
-            <diffuse>0.6 0.6 0.6 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    
-    <!-- ============================================ -->
-    <!-- 拐角外沿填充墙 -->
-    <!-- 拐角1（(-2,0) 右转）：外沿 x∈[-2,-1.175], y∈[0,0.825] -->
-    <!-- 拐角2（(-2,-3) 左转）：外沿 x∈[-2.825,-2], y∈[-3.825,-3] -->
-    <!-- ============================================ -->
-    <model name="corner1_fill_wall">
-      <static>true</static>
-      <pose>-1.5875 0.4125 0.25 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.825 0.825 0.5</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.825 0.825 0.5</size></box></geometry>
-          <material>
-            <ambient>0.6 0.6 0.6 1</ambient>
-            <diffuse>0.6 0.6 0.6 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    
-    <model name="corner2_fill_wall">
-      <static>true</static>
-      <pose>-2.4125 -3.4125 0.25 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.825 0.825 0.5</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.825 0.825 0.5</size></box></geometry>
+          <geometry><box><size>2.0 0.15 0.5</size></box></geometry>
           <material>
             <ambient>0.6 0.6 0.6 1</ambient>
             <diffuse>0.6 0.6 0.6 1</diffuse>

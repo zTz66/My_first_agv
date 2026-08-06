@@ -120,6 +120,8 @@ private:
   bool corridor_enabled_;              // 是否启用走廊约束
   double corridor_width_;              // 走廊宽度（米）
   double corridor_half_width_;         // 走廊半宽（米）
+  unsigned char outer_corridor_cost_;  // 走廊外区域代价值（默认128，可走但代价高）
+  double corridor_center_free_band_;   // 走廊中心线免费带宽（米），该带宽内为0代价，之外线性升到走廊外代价
   std::vector<CorridorWaypoint> waypoints_;  // 走廊航点列表
   std::vector<CorridorSegment> segments_;    // 走廊段列表
   

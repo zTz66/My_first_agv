@@ -66,14 +66,20 @@ def generate_launch_description():
         ),
         
         # ==========================================
-        # 2. AMCL 定位
+        # 2. 静态定位（Fake Localization，替代 AMCL）
+        #    删掉 AMCL 后，map->odom 由静态变换发布。
+        #    实测确认：odom 原点 = map 原点 (0,0)（Gazebo 里程计原点在世界原点，
+        #    不在机器人出生点），所以 map->odom 必须用单位变换。
+        #    若加 (-4.5,0) 平移会把机器人 map 位姿算成 -9（双重偏移），
+        #    导致起点落在错误位置、路径无法跟随。
         # ==========================================
         Node(
-            package='nav2_amcl',
-            executable='amcl',
-            name='amcl',
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_map_to_odom',
             output='screen',
-            parameters=[nav_params, {'use_sim_time': use_sim_time}]
+            arguments=['0', '0', '0', '0', '0', '0', '1', 'map', 'odom'],
+            parameters=[{'use_sim_time': use_sim_time}]
         ),
         
         # ==========================================
@@ -129,7 +135,6 @@ def generate_launch_description():
                         'autostart': True,
                         'node_names': [
                             'map_server', 
-                            'amcl',
                             'planner_server', 
                             'controller_server',
                             'bt_navigator'
